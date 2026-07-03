@@ -11,14 +11,12 @@ body {
     height: 100vh;
     overflow: hidden;
 }
-
 #gameCanvas {
     background: linear-gradient(to bottom, #111625, #05070f);
     border-bottom: 6px solid #ffa502;
     border-radius: 12px;
     box-shadow: 0 20px 50px rgba(0,0,0,0.8);
 }
-
 .ui-panel {
     margin-top: 12px;
     display: flex;
@@ -28,36 +26,21 @@ body {
     border-radius: 8px;
     border: 1px solid #1e293b;
 }
-
 .stat {
     text-align: center;
-    min-width: 120px;
+    min-width: 130px;
 }
-
 .stat-label {
     font-size: 11px;
     color: #64748b;
     letter-spacing: 1px;
     margin-bottom: 3px;
 }
-
 .value {
     font-size: 26px;
     font-weight: 900;
+    color: #00d2d3;
 }
-
-.active-zone { color: #2ed573 !important; }
-.danger-zone { color: #ff4757 !important; }
-
-.instructions {
-    margin-top: 12px;
-    text-align: center;
-    color: #94a3b8;
-    font-size: 13px;
-    max-width: 650px;
-    line-height: 1.5;
-}
-
 .btn-restart {
     margin-top: 10px;
     padding: 10px 25px;
@@ -70,7 +53,4 @@ body {
     display: none;
     font-size: 14px;
 }
-
-.btn-restart:hover {
-    background: #ff6b81;
-}
+.btn-restart:hover { background: #ff6b81; }
