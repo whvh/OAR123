@@ -1,80 +1,102 @@
-// Внутреннее состояние физического движка
+// Физическая модель: KuKirin G4 (37кг) + Райдер в стант-стойке (70кг)
 let state = {
-    speed: 0,
-    maxSpeed: 70,          
-    acceleration: 1.2,     
-    brakeForce: 1.8,       
-    friction: 0.1,         
-    riderLean: 0,          
-    gForce: 0,             
+    scooterAngle: 0,       // Угол наклона в радианах
+    angularVelocity: 0,    // Угловая скорость вращения вокруг задней оси
+    riderLean: 0,          // Смещение веса тела (минус - назад за бугель, плюс - на руль)
+    motorTorqueCurrent: 0, // Фазовый ток мотора (крутящий момент)
     isCrashed: false,
-    crashReason: "",
-    totalVector: 0
+    crashReason: ""
 };
 
 let activeKeys = { w: false, s: false, ArrowLeft: false, ArrowRight: false };
 
-// Слушаем команды от основного потока (UI)
+// Профиль SPORT-контроллера KuKirin G4 (резкий подрыв и умеренная фазовая инерция)
+const sportProfile = {
+    rampUp: 0.0035,     // Нарастание тока при нажатии газа
+    maxTorque: 0.0125,   // Пиковый крутящий момент мотора 2000W
+    decay: 0.65         // Скорость затухания магнитного поля при отпуске газа
+};
+
 self.onmessage = function(e) {
-    if (e.data.type === 'KEYS_UPDATE') {
-        activeKeys = e.data.keys;
-    }
+    if (e.data.type === 'KEYS_UPDATE') activeKeys = e.data.keys;
     if (e.data.type === 'RESET') {
-        state.speed = 0;
+        state.scooterAngle = 0;
+        state.angularVelocity = 0;
         state.riderLean = 0;
-        state.gForce = 0;
+        state.motorTorqueCurrent = 0;
         state.isCrashed = false;
         state.crashReason = "";
-        state.totalVector = 0;
     }
 };
 
-function updatePhysics() {
+function updateWheeliePhysics() {
     if (state.isCrashed) return;
 
-    // 1. Механика наклона тела (управление центром массы)
-    if (activeKeys.ArrowLeft) state.riderLean -= 1.5; 
-    if (activeKeys.ArrowRight) state.riderLean += 1.5; 
-    
-    if (!activeKeys.ArrowLeft && !activeKeys.ArrowRight) {
-        state.riderLean *= 0.9; 
+    // 1. Механика распределения веса тела (70кг)
+    if (activeKeys.ArrowLeft) state.riderLean -= 1.4;  // Уход за бугель
+    if (activeKeys.ArrowRight) state.riderLean += 1.4; // Упор в руль
+    if (!activeKeys.ArrowLeft && !activeKeys.ArrowRight) state.riderLean *= 0.85; 
+    state.riderLean = Math.max(-35, Math.min(35, state.riderLean));
+
+    // 2. Баланс сил и моментов (Torque)
+    let torque = 0;
+
+    // Гравитационный момент тяжелой конструкции (Тянет самокат вниз к земле)
+    torque -= 0.0055 * Math.cos(state.scooterAngle);
+
+    // Работа 2000W мотора (Кнопка W)
+    if (activeKeys.w) {
+        state.motorTorqueCurrent += sportProfile.rampUp; 
+        if (state.motorTorqueCurrent > sportProfile.maxTorque) {
+            state.motorTorqueCurrent = sportProfile.maxTorque;
+        }
+    } else {
+        // Микро-инерция двигателя (фазы обмоток затухают плавно)
+        state.motorTorqueCurrent *= sportProfile.decay; 
     }
-    state.riderLean = Math.max(-40, Math.min(40, state.riderLean));
+    torque += state.motorTorqueCurrent;
 
-    // 2. Расчет динамики мотора и гидравлики тормозов
-    if (activeKeys.w) { 
-        state.speed += state.acceleration;
-        state.gForce += 0.8; // Инерция тянет назад
-    }
-    if (activeKeys.s) { 
-        state.speed -= state.brakeForce;
-        state.gForce -= 1.2; // Инерция толкает вперед
+    // Задняя гидравлика тормозов (Кнопка S)
+    if (activeKeys.s) {
+        if (state.scooterAngle > 0) {
+            torque -= 0.018; // Тормозной момент превышает крутящий момент мотора
+            state.motorTorqueCurrent = 0; // Аппаратная отсечка газа тормозом
+        }
     }
 
-    if (!activeKeys.w && !activeKeys.s) {
-        if (state.speed > 0) state.speed -= state.friction;
-        state.gForce *= 0.8; 
+    // Влияние рычага веса пилота на бугель
+    torque -= (state.riderLean * 0.00022);
+
+    // 3. Вычисление итогового вектора движения
+    state.angularVelocity += torque;
+    state.angularVelocity *= 0.95; // Сопротивление и потери энергии
+    state.scooterAngle += state.angularVelocity;
+
+    // 4. Логика поражений (Crash Conditions)
+    // Жесткое падение вперед на переднее колесо
+    if (state.scooterAngle <= 0) {
+        state.scooterAngle = 0;
+        if (state.angularVelocity < -0.018) {
+            state.isCrashed = true;
+            state.crashReason = "ПРОИГРЫШ: Крэш передней вилки! Слишком резко прожал тормоз или бросил газ.";
+        }
+        state.angularVelocity = 0;
     }
 
-    if (state.speed < 0) state.speed = 0;
-    if (state.speed > state.maxSpeed) state.speed = state.maxSpeed;
-
-    // 3. Вычисление результирующего вектора сил G-Force + Lean
-    state.totalVector = state.riderLean + (state.gForce * 1.5);
-
-    // Проверка условий падения
-    if (state.totalVector > 45 && state.speed > 5) {
+    // Опрокидывание назад через спину
+    if (state.scooterAngle > 1.3) { // ~75 градусов
         state.isCrashed = true;
-        state.crashReason = "ВЫЛЕТ ЧЕРЕЗ РУЛЬ! (При торможении не уперся назад)";
-    } else if (state.totalVector < -45 && activeKeys.w) {
+        state.crashReason = "ПРОИГРЫШ: Перевернулся назад! В режиме SPORT мотор выдал пик, а тормоз не нажат вовремя.";
+    }
+
+    // Срыв с заднего упора
+    if (state.riderLean < -30 && state.scooterAngle > 0.35) {
         state.isCrashed = true;
-        state.crashReason = "САМОКАТ ВЫРВАЛО ИЗ РУК! (Резкий газ без наклона вперед)";
+        state.crashReason = "ПРОИГРЫШ: Упал с бугеля! Слишком рано отклонился назад, потеряв баланс.";
     }
 }
 
-// Фиксированный цикл обновления физики (~60 раз в секунду)
 setInterval(() => {
-    updatePhysics();
-    // Отправляем обновленный стейт обратно в главный поток для отрисовки
+    updateWheeliePhysics();
     self.postMessage(state);
 }, 1000 / 60);
