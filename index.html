@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KuKirin G4 Sport Simulator (70kg Rider)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <div class="ui-panel">
+        <div class="stat">
+            <div class="stat-label">РЕЖИМ</div>
+            <div class="value" style="color: #ff4757;">SPORT</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">СКОРОСТЬ</div>
+            <div id="speed" class="value">0 км/ч</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">БАЛАНС ТЕЛА</div>
+            <div id="balance" class="value">СТАБИЛЬНО</div>
+        </div>
+    </div>
+
+    <div class="instructions">
+        <strong>Управление:</strong> <br>
+        • <strong>W</strong> — Газ в пол (Резкий подрыв) | <strong>Стрелка ВЛЕВО</strong> — Смещение корпуса назад<br>
+        • <strong>S</strong> — Тормоз (Жесткий зажим дисков) | <strong>Стрелка ВПРАВО</strong> — Смещение корпуса вперед<br>
+        <button id="restartBtn" class="btn-restart">Начать заново</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const restartBtn = document.getElementById('restartBtn');
+        const speedEl = document.getElementById('speed');
+        const balanceEl = document.getElementById('balance');
+
+        // Инициализируем Web Worker для просчета физики
+        const physicsWorker = new Worker('worker.js');
+
+        // Отслеживание клавиатуры
+        const keys = { w: false, s: false, ArrowLeft: false, ArrowRight: false };
+
+        const updateKeys = () => {
+            physicsWorker.postMessage({ type: 'KEYS_UPDATE', keys });
+        };
+
+        window.addEventListener('keydown', (e) => { 
+            if (e.key in keys && !keys[e.key]) { 
+                keys[e.key] = true; 
+                updateKeys(); 
+            } 
+        });
+        
+        window.addEventListener('keyup', (e) => { 
+            if (e.key in keys) { 
+                keys[e.key] = false; 
+                updateKeys(); 
+            } 
+        });
+
+        restartBtn.addEventListener('click', () => {
+            physicsWorker.postMessage({ type: 'RESET' });
+            restartBtn.style.display = 'none';
+        });
+
+        // Прием данных из воркера и отрисовка (60 FPS)
+        physicsWorker.onmessage = function(e) {
+            const state = e.data;
+            
+            // Обновление интерфейса
+            speedEl.textContent = Math.round(state.speed) + ' км/ч';
+            
+            if (Math.abs(state.totalVector) > 25) {
+                balanceEl.textContent = 'ДИСБАЛАНС!';
+                balanceEl.className = 'value danger-zone';
+            } else {
+                balanceEl.textContent = 'СТАБИЛЬНО';
+                balanceEl.className = 'value';
+            }
+
+            // Очистка и отрисовка графики
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Отрисовка дороги
+            ctx.fillStyle = '#0f1422';
+            ctx.fillRect(0, 280, canvas.width, 120);
+            ctx.fillStyle = '#1e2736';
+            ctx.fillRect(0, 280, canvas.width, 4);
+
+            const sX = 300; 
+            const sY = 280;
+
+            if (!state.isCrashed) {
+                // Дека KuKirin G4
+                ctx.strokeStyle = '#ff4757';
+                ctx.lineWidth = 6;
+                ctx.beginPath(); ctx.moveTo(sX - 45, sY); ctx.lineTo(sX + 45, sY); ctx.stroke();
+                
+                // Рулевая стойка
+                ctx.strokeStyle = '#2f3542';
+                ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.moveTo(sX + 35, sY); ctx.lineTo(sX + 45, sY - 70); ctx.stroke();
+
+                // Колеса (11 дюймов)
+                ctx.fillStyle = '#1e272c';
+                ctx.beginPath(); ctx.arc(sX - 45, sY + 12, 14, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(sX + 45, sY + 12, 14, 0, Math.PI*2); ctx.fill();
+
+                // Райдер (70 кг)
+                let riderX = sX + (state.riderLean * 0.8); 
+                let riderY = sY - 50;
+
+                // Ноги пилота
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(sX - 10, sY); 
+                ctx.lineTo(riderX - 5, riderY);
+                ctx.moveTo(sX + 20, sY); 
+                ctx.lineTo(riderX + 5, riderY);
+                ctx.stroke();
+
+                // Торс и Голова
+                ctx.fillStyle = '#00d2d3';
+                ctx.beginPath(); ctx.arc(riderX, riderY - 30, 10, 0, Math.PI*2); ctx.fill(); 
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 8;
+                ctx.beginPath(); ctx.moveTo(riderX, riderY); ctx.lineTo(riderX, riderY - 25); ctx.stroke(); 
+
+                // Руки
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(riderX, riderY - 20); ctx.lineTo(sX + 45, sY - 70); ctx.stroke();
+            } else {
+                // Авария
+                ctx.fillStyle = 'rgba(255, 71, 87, 0.2)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ff4757';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(state.crashReason, canvas.width / 2, canvas.height / 2);
+                restartBtn.style.display = 'block';
+            }
+        };
+    </script>
+</body>
+</html>
