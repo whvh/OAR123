@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KuKirin G4 Sport Stunt Simulator (70kg Rider)</title>
+    <title>KuKirin G4 Pure Body Balance Simulator</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,24 +13,23 @@
     <div class="ui-panel">
         <div class="stat">
             <div class="stat-label">РЕЖИМ</div>
-            <div class="value" style="color: #ffa502;">SPORT (2000W)</div>
+            <div class="value" style="color: #00d2d3;">BODY BALANCE</div>
         </div>
         <div class="stat">
             <div class="stat-label">УГОЛ ПОДЪЕМА</div>
             <div id="angleDisplay" class="value">0°</div>
         </div>
         <div class="stat">
-            <div class="stat-label">СОСТОЯНИЕ СИСТЕМЫ</div>
-            <div id="balance" class="value">НА ЗЕМЛЕ</div>
+            <div class="stat-label">ВРЕМЯ В СТАНТЕ</div>
+            <div id="timerDisplay" class="value">0.0 сек</div>
         </div>
     </div>
 
     <div class="instructions">
-        <strong>Управление в режиме SPORT:</strong> <br>
-        • Удерживайте <strong>W</strong> — Газ (Резкая подача 2000W на обмотки)<br>
-        • Удерживайте <strong>S</strong> — Задний тормоз (Дисковая гидравлика)<br>
-        • <strong>Стрелка ВЛЕВО</strong> — Сместить корпус назад за бугель | <strong>Стрелка ВПРАВО</strong> — Навалиться на руль вперед.<br>
-        <em>Важно: Падение вперед на вилку или переворот назад за точку невозврата — это автоматический проигрыш.</em>
+        <strong>Чистый баланс телом (Мотор и тормоза ОТКЛЮЧЕНЫ):</strong> <br>
+        • <strong>Стрелка ВЛЕВО</strong> — Отклонить корпус и сильнее свесить ногу назад (поднимает самокат)<br>
+        • <strong>Стрелка ВПРАВО</strong> — Вернуть вес вперед, прижимаясь к рулю (опускает самокат)<br>
+        <em>Клавиши W и S намеренно деактивированы. Учитесь ловить точку равновесия только за счёт веса своих 70 кг.</em>
         <button id="restartBtn" class="btn-restart">Повторить попытку</button>
     </div>
 
@@ -39,12 +38,10 @@
         const ctx = canvas.getContext('2d');
         const restartBtn = document.getElementById('restartBtn');
         const angleDisplay = document.getElementById('angleDisplay');
-        const balanceEl = document.getElementById('balance');
+        const timerDisplay = document.getElementById('timerDisplay');
 
         const physicsWorker = new Worker('worker.js');
-        const keys = { w: false, s: false, ArrowLeft: false, ArrowRight: false };
-
-        let roadOffset = 0;
+        const keys = { ArrowLeft: false, ArrowRight: false };
 
         const updateKeys = () => {
             physicsWorker.postMessage({ type: 'KEYS_UPDATE', keys });
@@ -67,38 +64,17 @@
             
             const angleDeg = Math.round((state.scooterAngle * 180) / Math.PI);
             angleDisplay.textContent = angleDeg + '°';
-            
-            if (state.isCrashed) {
-                balanceEl.textContent = 'КРЭШ!';
-                balanceEl.className = 'value danger-zone';
-            } else if (angleDeg > 15) {
-                balanceEl.textContent = 'В ТОЧКЕ БАЛАНСА!';
-                balanceEl.className = 'value active-zone';
-            } else {
-                balanceEl.textContent = 'НА ЗЕМЛЕ';
-                balanceEl.className = 'value';
-            }
-
-            if (!state.isCrashed && angleDeg > 5) {
-                roadOffset = (roadOffset + 8) % 40; 
-            }
+            timerDisplay.textContent = (state.stuntTime / 1000).toFixed(1) + ' сек';
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Отрисовка дороги
-            ctx.fillStyle = '#0f1422';
-            ctx.fillRect(0, 380, canvas.width, 120);
+            // Земля
             ctx.fillStyle = '#1e2736';
-            ctx.fillRect(0, 380, canvas.width, 4);
-            
-            ctx.strokeStyle = '#57606f';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(-roadOffset, 430);
-            ctx.lineTo(canvas.width + 40, 430);
-            ctx.stroke();
+            ctx.fillRect(0, 380, canvas.width, 120);
+            ctx.fillStyle = '#2f3640';
+            ctx.fillRect(0, 380, canvas.width, 6);
 
-            const pivotX = 350;
+            const pivotX = 400; 
             const pivotY = 380;
 
             if (!state.isCrashed) {
@@ -106,16 +82,16 @@
                 ctx.translate(pivotX, pivotY);
                 ctx.rotate(-state.scooterAngle);
 
-                // Заднее мотор-колесо
+                // Заднее колесо
                 ctx.fillStyle = '#1e272c';
                 ctx.beginPath(); ctx.arc(0, -14, 14, 0, Math.PI*2); ctx.fill();
 
-                // Тяжелая дека KuKirin G4 (37кг)
+                // Дека
                 ctx.strokeStyle = '#ff4757';
                 ctx.lineWidth = 6;
                 ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(90, -14); ctx.stroke();
 
-                // Заднее крыло-упор (бугель)
+                // Бугель (упор для первой ноги)
                 ctx.strokeStyle = '#ffa502';
                 ctx.lineWidth = 4;
                 ctx.beginPath(); 
@@ -124,39 +100,41 @@
                 ctx.lineTo(-5, -35);
                 ctx.stroke();
                 
-                // Рулевая колонка
+                // Руль и переднее колесо
                 ctx.strokeStyle = '#2f3542';
                 ctx.lineWidth = 5;
                 ctx.beginPath(); ctx.moveTo(80, -14); ctx.lineTo(90, -84); ctx.stroke();
-
-                // Переднее колесо
                 ctx.fillStyle = '#1e272c';
                 ctx.beginPath(); ctx.arc(90, -14, 14, 0, Math.PI*2); ctx.fill();
 
-                // РАЙДЕР (Стойка под стант: 70кг)
-                let riderLeanX = state.riderLean * 0.7;
-                let frontFootX = 45;   // Нога по центру деки
-                let frontFootY = -14;
-                let backFootX = -20;   // Нога на бугеле (половина свисает)
-                let backFootY = -32;
-                let hipX = 25 + riderLeanX;
-                let hipY = -65;
-                let headX = hipX + (riderLeanX * 0.3);
+                // РАЙДЕР
+                let lean = state.riderLean * 0.7;
+                let footOnBugelX = -15;
+                let footOnBugelY = -35;
+                let hipX = 15 + lean;
+                let hipY = -70;
+                let headX = hipX + (lean * 0.2);
                 let headY = hipY - 45;
 
-                // Ноги
+                // Опорная нога на бугеле
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 4;
-                ctx.beginPath(); ctx.moveTo(backFootX, backFootY); ctx.lineTo(hipX - 10, hipY); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(frontFootX, frontFootY); ctx.lineTo(hipX + 5, hipY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(footOnBugelX, footOnBugelY); ctx.lineTo(hipX - 5, hipY); ctx.stroke();
+
+                // СВИСАЮЩАЯ НОГА (Балансир сзади)
+                let hangingFootX = -35 + (lean * 0.5);
+                let hangingFootY = -10 + (lean * 0.2); 
+                ctx.strokeStyle = '#00d2d3'; 
+                ctx.beginPath(); ctx.moveTo(hipX - 8, hipY); ctx.lineTo(hangingFootX, hangingFootY); ctx.stroke();
 
                 // Корпус
+                ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 8;
                 ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(headX, headY + 10); ctx.stroke();
-                ctx.fillStyle = '#00d2d3';
+                ctx.fillStyle = '#ffffff';
                 ctx.beginPath(); ctx.arc(headX, headY, 10, 0, Math.PI*2); ctx.fill();
 
-                // Руки удерживают руль
+                // Руки
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 3;
                 ctx.beginPath(); ctx.moveTo(headX, headY + 15); ctx.lineTo(90, -84); ctx.stroke();
